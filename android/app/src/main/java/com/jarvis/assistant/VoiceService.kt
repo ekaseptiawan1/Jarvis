@@ -1,9 +1,6 @@
 package com.jarvis.assistant
 
-import ai.picovoice.porcupine.Porcupine
-import ai.picovoice.porcupine.PorcupineException
-import ai.picovoice.porcupine.PorcupineManager
-import ai.picovoice.porcupine.PorcupineManagerCallback
+import com.openwakeword.OpenWakeWord
 import android.app.*
 import android.content.Intent
 import android.os.*
@@ -22,7 +19,7 @@ import java.util.Locale
 
 class VoiceService : Service(), TextToSpeech.OnInitListener {
     private var recognizer: SpeechRecognizer? = null
-    private var wakeManager: PorcupineManager? = null
+    private var wakeDetector: OpenWakeWord? = null
     private var tts: TextToSpeech? = null
     private val client = OkHttpClient()
     private val channel = "jarvis_voice"
@@ -47,7 +44,7 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
         super.onCreate()
         tts = TextToSpeech(this, this)
         createChannel()
-        startForeground(7, notification("Standby • ucapkan “Jarvis”"))
+        startForeground(7, notification("Standby • ucapkan “Hey Jarvis”"))
         listening = true
         enterWakeMode()
     }
@@ -135,30 +132,19 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
         mainHandler.removeCallbacks(idleTimeout)
         stopCommandRecognizer()
 
-        val accessKey = getSharedPreferences("com.jarvis.assistant_preferences", 0)
-            .getString("picovoice_key", "").orEmpty()
-        if (accessKey.isBlank()) {
-            update("Isi Picovoice AccessKey di pengaturan untuk mengaktifkan wake word")
-            return
-        }
-
         try {
             stopWakeDetector()
-            wakeManager = PorcupineManager.Builder()
-                .setAccessKey(accessKey)
-                .setKeyword(Porcupine.BuiltInKeyword.JARVIS)
-                .setSensitivity(0.65f)
-                .build(applicationContext, PorcupineManagerCallback {
-                    mainHandler.post { onWakeWordDetected() }
-                })
-            wakeManager?.start()
-            update("Standby • menunggu “Jarvis”")
-        } catch (e: PorcupineException) {
+            wakeDetector = OpenWakeWord.Builder(applicationContext)
+                .setModel(OpenWakeWord.BuiltInModel.HEY_JARVIS)
+                .setThreshold(0.5f)
+                .build()
+            wakeDetector?.start {
+                mainHandler.post { onWakeWordDetected() }
+            }
+            update("Standby • menunggu “Hey Jarvis” (offline)")
+        } catch (_: Exception) {
             stopWakeDetector()
-            update("Wake word gagal: periksa AccessKey dan koneksi internet")
-        } catch (e: Exception) {
-            stopWakeDetector()
-            update("Wake word tidak dapat dimulai")
+            update("Wake word gagal dimulai. Periksa izin mikrofon.")
         }
     }
 
@@ -175,10 +161,10 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun stopWakeDetector() {
-        val manager = wakeManager ?: return
-        try { manager.stop() } catch (_: Exception) {}
-        try { manager.delete() } catch (_: Exception) {}
-        wakeManager = null
+        val detector = wakeDetector ?: return
+        try { detector.stop() } catch (_: Exception) {}
+        try { detector.release() } catch (_: Exception) {}
+        wakeDetector = null
     }
 
     private fun stopCommandRecognizer() {
