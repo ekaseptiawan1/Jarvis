@@ -127,20 +127,47 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
         return false
     }
     private fun askAi(prompt: String) {
-        val endpoint = getSharedPreferences("com.jarvis.assistant_preferences", 0).getString("endpoint", "https://api.openai.com")
-        val key = getSharedPreferences("com.jarvis.assistant_preferences", 0).getString("key", "") ?: ""
-        if (key.isBlank()) { speak("Perintah belum dikenali. Masukkan API key AI pada pengaturan JARVIS."); return }
-        val body = JSONObject().put("model", "gpt-4o-mini")
-            .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", "Kamu JARVIS, asisten Android yang ramah. Jawab singkat dalam bahasa Indonesia."))
-                .put(JSONObject().put("role", "user").put("content", prompt)))
-        val req = Request.Builder().url(endpoint!!.trimEnd('/') + "/v1/chat/completions")
-            .addHeader("Authorization", "Bearer $key").post(body.toString().toRequestBody("application/json".toMediaType())).build()
+        val key = getSharedPreferences("com.jarvis.assistant_preferences", 0)
+            .getString("gemini_key", "") ?: ""
+        if (key.isBlank()) {
+            speak("Masukkan Gemini API Key terlebih dahulu di pengaturan JARVIS.")
+            return
+        }
+        val body = JSONObject()
+            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(
+                JSONObject().put("text", "Kamu adalah JARVIS, asisten Android pribadi yang ramah dan cerdas. Jawab singkat, jelas, dan selalu dalam bahasa Indonesia.")
+            )))
+            .put("contents", JSONArray().put(
+                JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))
+            ))
+            .put("generationConfig", JSONObject().put("temperature", 0.7).put("maxOutputTokens", 700))
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+        val req = Request.Builder().url(url)
+            .addHeader("x-goog-api-key", key)
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
         client.newCall(req).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { speak("Koneksi AI gagal. Periksa internet dan endpoint API.") }
+            override fun onFailure(call: Call, e: IOException) {
+                speak("Koneksi ke Gemini gagal. Periksa internet dan Gemini API Key.")
+            }
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    val answer = try { JSONObject(it.body?.string() ?: "").getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content") }
-                    catch (_: Exception) { "Saya belum bisa memproses jawaban dari server." }
+                    val answer = try {
+                        val json = JSONObject(it.body?.string() ?: "")
+                        if (!it.isSuccessful) {
+                            val message = json.optJSONObject("error")?.optString("message")
+                            "Gemini mengalami kendala: " + (message ?: "HTTP " + it.code)
+                        } else {
+                            json.getJSONArray("candidates").getJSONObject(0)
+                                .getJSONObject("content").getJSONArray("parts")
+                                .let { parts -> (0 until parts.length()).mapNotNull { index ->
+                                    parts.getJSONObject(index).optString("text").takeIf { value -> value.isNotBlank() }
+                                }.joinToString(" ") }
+                                .ifBlank { "Gemini tidak memberikan jawaban teks." }
+                        }
+                    } catch (_: Exception) {
+                        "Saya belum bisa membaca jawaban dari Gemini."
+                    }
                     speak(answer)
                 }
             }
