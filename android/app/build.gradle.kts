@@ -15,7 +15,6 @@ android {
         versionName = "1.0"
     }
 
-    // Keep Java and Kotlin bytecode targets aligned for Gradle validation.
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -29,4 +28,5 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("ai.picovoice:porcupine-android:4.0.2")
 }
