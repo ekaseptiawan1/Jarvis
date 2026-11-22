@@ -22,6 +22,10 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
     private val client = OkHttpClient()
     private val channel = "jarvis_voice"
     private var listening = false
+    private var isSpeaking = false
+    private var awaitingReplyText = false
+    private var awaitingReplyConfirmation = false
+    private var replyDraft = ""
 
     override fun onCreate() {
         super.onCreate()
@@ -30,7 +34,19 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
         startForeground(7, notification("Menyiapkan pengenalan suara…"))
         beginListening()
     }
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_INCOMING_MESSAGE) {
+            val sender = intent.getStringExtra(EXTRA_SENDER).orEmpty()
+            val message = intent.getStringExtra(EXTRA_MESSAGE).orEmpty()
+            if (sender.isNotBlank() && message.isNotBlank()) {
+                awaitingReplyText = true
+                awaitingReplyConfirmation = false
+                replyDraft = ""
+                speak("Pesan dari $sender: $message. Mau saya balas apa?")
+            }
+        }
+        return START_STICKY
+    }
     override fun onBind(intent: Intent?) = null
     override fun onDestroy() {
         listening = false
@@ -38,7 +54,23 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
         tts?.shutdown()
         super.onDestroy()
     }
-    override fun onInit(status: Int) { if (status == TextToSpeech.SUCCESS) tts?.language = Locale("id", "ID") }
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            tts?.language = Locale("id", "ID")
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(id: String?) {}
+                override fun onDone(id: String?) {
+                    isSpeaking = false
+                    Handler(Looper.getMainLooper()).postDelayed({ if (listening) startRecognition() }, 350)
+                }
+                @Deprecated("Deprecated in Java")
+                override fun onError(id: String?) {
+                    isSpeaking = false
+                    Handler(Looper.getMainLooper()).post { if (listening) startRecognition() }
+                }
+            })
+        }
+    }
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
@@ -64,11 +96,11 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() { update("Memproses suara…") }
-                override fun onError(error: Int) { if (listening) Handler(Looper.getMainLooper()).postDelayed({ startRecognition() }, 900) }
+                override fun onError(error: Int) { if (listening && !isSpeaking) Handler(Looper.getMainLooper()).postDelayed({ startRecognition() }, 900) }
                 override fun onResults(results: Bundle?) {
                     val words = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                     if (!words.isNullOrBlank()) handleCommand(words)
-                    if (listening) Handler(Looper.getMainLooper()).postDelayed({ startRecognition() }, 700)
+                    if (listening && !isSpeaking) Handler(Looper.getMainLooper()).postDelayed({ startRecognition() }, 700)
                 }
                 override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -89,6 +121,38 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
     private fun handleCommand(raw: String) {
         val s = raw.lowercase(Locale("id", "ID")).trim()
         update("Kamu: $raw")
+        if (awaitingReplyText) {
+            if (s in listOf("batal", "jangan jadi", "batalkan")) {
+                awaitingReplyText = false
+                speak("Baik, pesan tidak jadi dibalas.")
+            } else {
+                replyDraft = raw.trim()
+                awaitingReplyText = false
+                awaitingReplyConfirmation = true
+                speak("Saya akan membalas: $replyDraft. Ucapkan kirim untuk mengirim, atau batal untuk membatalkan.")
+            }
+            return
+        }
+        if (awaitingReplyConfirmation) {
+            when {
+                s == "kirim" || s == "ya kirim" || s == "kirim sekarang" -> {
+                    val sent = MessageReplyBridge.sendReply(this, replyDraft)
+                    awaitingReplyConfirmation = false
+                    replyDraft = ""
+                    speak(if (sent) "Balasan berhasil dikirim." else "Saya tidak menemukan tombol balas cepat untuk pesan ini. Balas langsung dari aplikasinya.")
+                }
+                s == "batal" || s == "jangan jadi" || s == "batalkan" -> {
+                    awaitingReplyConfirmation = false
+                    replyDraft = ""
+                    speak("Baik, balasan dibatalkan.")
+                }
+                else -> {
+                    replyDraft = raw.trim()
+                    speak("Draf diperbarui menjadi: $replyDraft. Ucapkan kirim untuk mengirim, atau batal.")
+                }
+            }
+            return
+        }
         when {
             s.contains("kembali") || s.contains("tombol kembali") -> {
                 if (JarvisAccessibilityService.global("back")) speak("Kembali.") else speak("Aktifkan izin Accessibility JARVIS terlebih dahulu.")
@@ -175,8 +239,22 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
     }
     private fun speak(text: String) {
         update(text)
-        Handler(Looper.getMainLooper()).post { tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis_reply") }
+        Handler(Looper.getMainLooper()).post {
+            isSpeaking = true
+            try { recognizer?.cancel() } catch (_: Exception) {}
+            val result = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis_reply")
+            if (result == TextToSpeech.ERROR || tts == null) {
+                isSpeaking = false
+                if (listening) Handler(Looper.getMainLooper()).postDelayed({ startRecognition() }, 500)
+            }
+        }
     }
+    companion object {
+        const val ACTION_INCOMING_MESSAGE = "com.jarvis.assistant.INCOMING_MESSAGE"
+        const val EXTRA_SENDER = "sender"
+        const val EXTRA_MESSAGE = "message"
+    }
+
     private fun update(msg: String) {
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(7, notification(msg.take(100)))
