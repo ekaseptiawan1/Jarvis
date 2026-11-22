@@ -141,7 +141,7 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
                 JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))
             ))
             .put("generationConfig", JSONObject().put("temperature", 0.7).put("maxOutputTokens", 700))
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
         val req = Request.Builder().url(url)
             .addHeader("x-goog-api-key", key)
             .post(body.toString().toRequestBody("application/json".toMediaType()))
