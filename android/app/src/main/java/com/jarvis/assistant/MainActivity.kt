@@ -7,18 +7,18 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.widget.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 class MainActivity : Activity() {
     private lateinit var status: TextView
-    private lateinit var endpoint: EditText
     private lateinit var apiKey: EditText
-    private lateinit var log: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val prefs = getSharedPreferences("com.jarvis.assistant_preferences", 0)
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 36, 32, 24)
@@ -27,9 +27,9 @@ class MainActivity : Activity() {
         fun label(s: String, size: Float = 16f) = TextView(this).apply {
             text = s; textSize = size; setTextColor(0xFFEAF2FF.toInt())
         }
-        status = label("JARVIS • Siap dikonfigurasi", 22f)
+        status = label("JARVIS • Gemini AI", 22f)
         layout.addView(status)
-        layout.addView(label("Asisten suara AI pribadi", 14f))
+        layout.addView(label("Asisten suara AI pribadi • Bahasa Indonesia", 14f))
         val start = Button(this).apply { text = "AKTIFKAN JARVIS" }
         start.setOnClickListener { requestAndStart() }
         layout.addView(start)
@@ -39,21 +39,21 @@ class MainActivity : Activity() {
         val access = Button(this).apply { text = "IZINKAN KONTROL LAYAR (ACCESSIBILITY)" }
         access.setOnClickListener { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         layout.addView(access)
-        layout.addView(label("Endpoint API kompatibel OpenAI (contoh: https://api.openai.com)"))
-        endpoint = EditText(this).apply { setText(getSharedPreferences("com.jarvis.assistant_preferences", 0).getString("endpoint", "https://api.openai.com")); setTextColor(-1); hint = "https://..." }
-        layout.addView(endpoint)
-        layout.addView(label("API key (disimpan lokal di perangkat)"))
-        apiKey = EditText(this).apply { setText(getSharedPreferences("com.jarvis.assistant_preferences", 0).getString("key", "")); setTextColor(-1); hint = "Masukkan API key"; inputType = 129 }
+        layout.addView(label("Gemini API Key (buat di Google AI Studio)"))
+        apiKey = EditText(this).apply {
+            setText(prefs.getString("gemini_key", ""))
+            setTextColor(-1); hint = "Tempel Gemini API Key di sini"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
         layout.addView(apiKey)
-        val save = Button(this).apply { text = "SIMPAN PENGATURAN AI" }
+        val save = Button(this).apply { text = "SIMPAN GEMINI API KEY" }
         save.setOnClickListener {
-            getSharedPreferences("com.jarvis.assistant_preferences", 0).edit().putString("endpoint", endpoint.text.toString().trim().trimEnd('/'))
-                .putString("key", apiKey.text.toString().trim()).apply()
-            Toast.makeText(this, "Pengaturan disimpan", Toast.LENGTH_SHORT).show()
+            prefs.edit().putString("gemini_key", apiKey.text.toString().trim()).apply()
+            Toast.makeText(this, "Gemini API Key disimpan di perangkat", Toast.LENGTH_SHORT).show()
         }
         layout.addView(save)
-        log = label("Perintah contoh: “Buka YouTube”, “Buka WhatsApp”, “Jam berapa sekarang?”")
-        layout.addView(log)
+        layout.addView(label("Model: Gemini 2.5 Flash"))
+        layout.addView(label("Contoh: “Buka YouTube”, “Buka WhatsApp”, atau tanyakan apa saja."))
         setContentView(ScrollView(this).apply { addView(layout) })
         requestPermissionsIfNeeded()
     }
@@ -68,9 +68,9 @@ class MainActivity : Activity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissionsIfNeeded(); return
         }
-        getSharedPreferences("com.jarvis.assistant_preferences", 0).edit().putString("endpoint", endpoint.text.toString().trim().trimEnd('/'))
-            .putString("key", apiKey.text.toString().trim()).apply()
+        getSharedPreferences("com.jarvis.assistant_preferences", 0).edit()
+            .putString("gemini_key", apiKey.text.toString().trim()).apply()
         ContextCompat.startForegroundService(this, Intent(this, VoiceService::class.java))
-        status.text = "JARVIS aktif • mikrofon berjalan melalui notifikasi"
+        status.text = "JARVIS aktif • Gemini AI siap digunakan"
     }
 }
