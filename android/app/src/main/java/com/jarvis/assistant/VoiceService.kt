@@ -7,6 +7,7 @@ import android.speech.*
 import android.content.Context
 import android.content.pm.PackageManager
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
