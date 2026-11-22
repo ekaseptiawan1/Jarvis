@@ -36,6 +36,10 @@ class MainActivity : Activity() {
         val stop = Button(this).apply { text = "HENTIKAN MIKROFON" }
         stop.setOnClickListener { stopService(Intent(this, VoiceService::class.java)); status.text = "Mikrofon dihentikan" }
         layout.addView(stop)
+        val notifications = Button(this).apply { text = "IZINKAN BACA & BALAS PESAN" }
+        notifications.setOnClickListener { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        layout.addView(notifications)
+        layout.addView(label("JARVIS akan membacakan pesan masuk dan meminta konfirmasi sebelum membalas.", 13f))
         val access = Button(this).apply { text = "IZINKAN KONTROL LAYAR (ACCESSIBILITY)" }
         access.setOnClickListener { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         layout.addView(access)
@@ -52,7 +56,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Gemini API Key disimpan di perangkat", Toast.LENGTH_SHORT).show()
         }
         layout.addView(save)
-        layout.addView(label("Model: Gemini 2.5 Flash"))
+        layout.addView(label("Model: Gemini 3.5 Flash"))
         layout.addView(label("Contoh: “Buka YouTube”, “Buka WhatsApp”, atau tanyakan apa saja."))
         setContentView(ScrollView(this).apply { addView(layout) })
         requestPermissionsIfNeeded()
