@@ -12,7 +12,7 @@ object MessageReplyBridge {
     @Volatile var replyAction: Notification.Action? = null
     @Volatile var remoteInputs: Array<RemoteInput>? = null
 
-    fun sendReply(service: NotificationListenerService, text: String): Boolean {
+    fun sendReply(context: android.content.Context, text: String): Boolean {
         val action = replyAction ?: return false
         val inputs = remoteInputs ?: return false
         return try {
@@ -20,7 +20,7 @@ object MessageReplyBridge {
             val results = Bundle()
             inputs.forEach { results.putCharSequence(it.resultKey, text) }
             RemoteInput.addResultsToIntent(inputs, fillIn, results)
-            action.actionIntent.send(service, 0, fillIn)
+            action.actionIntent.send(context, 0, fillIn)
             replyAction = null
             remoteInputs = null
             true
