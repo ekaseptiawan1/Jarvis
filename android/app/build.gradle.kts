@@ -28,5 +28,5 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("ai.picovoice:porcupine-android:4.0.2")
+    implementation("com.github.msnilsen:openwakeword-android:0.1.0")
 }
